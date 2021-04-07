@@ -1,0 +1,9 @@
+doomgeneric/build
+doomgeneric/*.o
+.DS_Store
+doomgeneric/doomgeneric
+doomgeneric/doomgeneric.exe
+doomgeneric/doomgeneric-stdout.txt
+doomgeneric/doomgeneric-stderr.txt
+**/*.wad
+

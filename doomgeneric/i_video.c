@@ -82,7 +82,11 @@ struct color {
     uint32_t a:8;
 };
 
+#ifdef __PSP__
+uint32_t __attribute__((aligned(16))) colors[256];
+#else
 static struct color colors[256];
+#endif
 
 void I_GetEvent(void);
 
@@ -126,6 +130,7 @@ typedef struct
 
 static uint16_t rgb565_palette[256];
 
+#ifndef __PSP__
 void cmap_to_rgb565(uint16_t * out, uint8_t * in, int in_pixels)
 {
     int i, j;
@@ -173,6 +178,7 @@ void cmap_to_fb(uint8_t * out, uint8_t * in, int in_pixels)
         in++;
     }
 }
+#endif
 
 void I_InitGraphics (void)
 {
@@ -252,6 +258,7 @@ void I_UpdateNoBlit (void)
 
 void I_FinishUpdate (void)
 {
+#ifndef __PSP__
     int y;
     int x_offset, y_offset, x_offset_end;
     unsigned char *line_in, *line_out;
@@ -290,6 +297,7 @@ void I_FinishUpdate (void)
         }
         line_in += SCREENWIDTH;
     }
+#endif
 
 	DG_DrawFrame();
 }
@@ -331,10 +339,18 @@ void I_SetPalette (byte* palette)
      * map to the right pixel format over here! */
 
     for (i=0; i<256; ++i ) {
+#ifdef __PSP__
+        unsigned int r = gammatable[usegamma][*palette++] & 0xFF;
+        unsigned int g = gammatable[usegamma][*palette++] & 0xFF;
+        unsigned int b = gammatable[usegamma][*palette++] & 0xFF;
+
+        colors[i] = (0xFF << 24)|(b << 16)|(g << 8)|(r);
+#else
         colors[i].a = 0;
         colors[i].r = gammatable[usegamma][*palette++];
         colors[i].g = gammatable[usegamma][*palette++];
         colors[i].b = gammatable[usegamma][*palette++];
+#endif
     }
 }
 

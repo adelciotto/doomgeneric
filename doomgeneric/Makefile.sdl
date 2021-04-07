@@ -12,15 +12,15 @@ else
 endif
 
 
-SDL_CFLAGS = -D_THREAD_SAFE -I/usr/include/SDL2
-SDL_LIBS =
+SDL_CFLAGS = $(shell pkg-config sdl2 --cflags)
+SDL_LIBS = $(shell pkg-config sdl2 --libs)
 
 
 CC=clang  # gcc or g++
 CFLAGS+=-ggdb3 -Os $(INCLUDES) $(SDL_CFLAGS)
 LDFLAGS+=-Wl,-dead_strip
 CFLAGS+=-ggdb3 -Wall -DNORMALUNIX -DLINUX -DSNDSERV # -DUSEASM
-LIBS+=-lm -lc -lSDL2
+LIBS+=-lm -lc $(SDL_LIBS)
 
 # subdirectory for objects
 OBJDIR=build

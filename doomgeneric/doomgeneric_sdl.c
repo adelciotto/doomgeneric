@@ -1,4 +1,4 @@
-//doomgeneric for soso os
+//doomgeneric for SDL2
 
 #include "doomkeys.h"
 #include "m_argv.h"
@@ -94,19 +94,21 @@ void DG_Init(){
   window = SDL_CreateWindow("DOOM",
                             SDL_WINDOWPOS_UNDEFINED,
                             SDL_WINDOWPOS_UNDEFINED,
-                            DOOMGENERIC_RESX,
-                            DOOMGENERIC_RESY,
+                            DOOMGENERIC_RESX*2,
+                            DOOMGENERIC_RESY*2,
                             SDL_WINDOW_SHOWN
                             );
 
   // Setup renderer
   renderer =  SDL_CreateRenderer( window, -1, SDL_RENDERER_ACCELERATED);
+  SDL_RenderSetLogicalSize(renderer, DOOMGENERIC_RESX, DOOMGENERIC_RESY);
+
   // Clear winow
   SDL_RenderClear( renderer );
   // Render the rect to the screen
   SDL_RenderPresent(renderer);
 
-  texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_TARGET, DOOMGENERIC_RESX, DOOMGENERIC_RESY);
+  texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, DOOMGENERIC_RESX, DOOMGENERIC_RESY);
 }
 
 void DG_DrawFrame()

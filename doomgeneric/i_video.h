@@ -110,6 +110,7 @@ void I_FinishUpdate (void);
 void I_ReadScreen (byte* scr);
 
 void I_BeginRead (void);
+void I_EndRead (void);
 
 void I_SetWindowTitle(char *title);
 
@@ -154,5 +155,9 @@ extern int aspect_ratio_correct;
 
 extern int show_diskicon;
 extern int diskicon_readbytes;
+
+#ifdef __PSP__
+extern uint32_t __attribute__((aligned(16))) colors[256];
+#endif
 
 #endif
