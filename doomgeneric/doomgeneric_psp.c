@@ -7,10 +7,13 @@
 #include <pspkernel.h>
 #include <pspgu.h>
 #include <pspgum.h>
+#include <pspctrl.h>
 #include <pspdisplay.h>
 #include <psprtc.h>
+
 #include <stdio.h>
 #include <time.h>
+#include <math.h>
 
 #define PSP_VIRTUALWIDTH  4096
 #define PSP_VIRTUALHEIGHT 4096
@@ -19,6 +22,8 @@
 #define FRAMEBUFFER_WIDTH 512
 #define BYTES_PER_PIXEL   4
 #define FRAMEBUFFER_SIZE  (FRAMEBUFFER_WIDTH*PSP_SCREENHEIGHT*BYTES_PER_PIXEL)
+
+#define BUTTONQUEUE_SIZE 16
 
 PSP_MODULE_INFO("doomgeneric", 0, 1, 0);
 PSP_HEAP_SIZE_KB(16*1024); // 16KB
@@ -29,9 +34,36 @@ struct Vertex
 	float x,y,z;
 };
 
+struct Viewport
+{
+  float x, y;
+  float w, h;
+};
+
 static uint64_t s_startTic;
 static uint64_t s_ticFrequency;
 static uint32_t	__attribute__((aligned(16))) s_displayList[262144];
+
+static SceCtrlData s_inputData;
+static SceCtrlData s_oldInputData;
+static uint16_t s_buttonQueue[BUTTONQUEUE_SIZE];
+static uint32_t s_buttonQueueWriteIndex = 0;
+static uint32_t s_buttonQueueReadIndex = 0;
+static uint32_t s_buttonsToCheck[] = {
+  PSP_CTRL_START,
+  PSP_CTRL_SELECT,
+  PSP_CTRL_UP,
+  PSP_CTRL_DOWN,
+  PSP_CTRL_LEFT,
+  PSP_CTRL_RIGHT,
+  PSP_CTRL_LTRIGGER,
+  PSP_CTRL_RTRIGGER,
+  PSP_CTRL_CROSS,
+  PSP_CTRL_SQUARE,
+  PSP_CTRL_TRIANGLE
+};
+
+static struct Viewport s_viewport;
 
 static int exitCallback(int arg1, int arg2, void* common)
 {
@@ -58,8 +90,28 @@ static int setupCallbacks(void)
   return thid;
 }
 
+static void setupViewport()
+{
+  int realW = PSP_SCREENWIDTH;
+  int realH = PSP_SCREENHEIGHT;
+  int logicalW = SCREENWIDTH;
+  int logicalH = SCREENHEIGHT;
+
+  // DOOM native resolution has a narrower aspect ratio, so we will scale
+  // it up to the PSP by adding black sidebars.
+  float scale = (float)realH / logicalH;
+  s_viewport.y = 0.0f;
+  s_viewport.h = realH;
+  s_viewport.w = ceilf((float)logicalW * scale);
+  s_viewport.x = (realW - s_viewport.w) / 2.0f;
+}
+
 static void setupGraphics()
 {
+  sceKernelDcacheWritebackAll();
+
+  setupViewport();
+
   sceGuInit();
 
   sceGuStart(GU_DIRECT, s_displayList);
@@ -79,6 +131,7 @@ static void setupGraphics()
   sceGuEnable(GU_CULL_FACE);
 
   sceGuEnable(GU_TEXTURE_2D);
+  sceGuTexWrap(GU_CLAMP, GU_CLAMP);
   sceGuClear(GU_COLOR_BUFFER_BIT);
 
   sceGuFinish();
@@ -99,6 +152,85 @@ void DG_Init()
   s_ticFrequency = sceRtcGetTickResolution();
 
   setupGraphics();
+
+  sceCtrlSetSamplingCycle(0);
+  sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
+}
+
+static uint8_t convertToDoomKey(uint32_t button)
+{
+  uint8_t doomKey = 0;
+
+  switch (button)
+  {
+    case PSP_CTRL_START:
+      doomKey = KEY_ENTER;
+      break;
+    case PSP_CTRL_SELECT:
+      doomKey = KEY_ESCAPE;
+      break;
+    case PSP_CTRL_UP:
+      doomKey = KEY_UPARROW;
+      break;
+    case PSP_CTRL_DOWN:
+      doomKey = KEY_DOWNARROW;
+      break;
+    case PSP_CTRL_LEFT:
+      doomKey = KEY_LEFTARROW;
+      break;
+    case PSP_CTRL_RIGHT:
+      doomKey = KEY_RIGHTARROW;
+      break;
+    case PSP_CTRL_RTRIGGER:
+      doomKey = KEY_FIRE;
+      break;
+    case PSP_CTRL_LTRIGGER:
+      doomKey = KEY_RSHIFT;
+      break;
+    case PSP_CTRL_SQUARE:
+      doomKey = KEY_USE;
+      break;
+    case PSP_CTRL_TRIANGLE:
+      doomKey = KEY_TAB;
+      break;
+    case PSP_CTRL_CROSS:
+    default:
+      break;
+    }
+
+  return doomKey;
+}
+
+static void addButtonToQueue(int pressed, uint32_t button)
+{
+  uint8_t key = convertToDoomKey(button);
+
+  uint16_t buttonData = (pressed << 8) | key;
+
+  s_buttonQueue[s_buttonQueueWriteIndex] = buttonData;
+  s_buttonQueueWriteIndex++;
+  s_buttonQueueWriteIndex %= BUTTONQUEUE_SIZE;
+}
+
+static void handleInput()
+{
+  s_oldInputData = s_inputData;
+
+  sceCtrlPeekBufferPositive(&s_inputData, 1);
+
+  int buttons = sizeof(s_buttonsToCheck) / sizeof(uint32_t);
+  for (int i = 0; i < buttons; i++)
+  {
+    uint32_t button = s_buttonsToCheck[i];
+    if (s_inputData.Buttons & button && !(s_oldInputData.Buttons & button))
+    {
+      addButtonToQueue(1, button);
+    }
+    else if (!(s_inputData.Buttons & button) && s_oldInputData.Buttons & button)
+    {
+      addButtonToQueue(0, button);
+    }
+  }
 }
 
 void DG_DrawFrame()
@@ -123,9 +255,9 @@ void DG_DrawFrame()
   // Setup the vertices for the doom framebuffer.
   struct Vertex *vertices = (struct Vertex*)sceGuGetMemory(2 * sizeof(struct Vertex));
   vertices[0].u = 0; vertices[0].v = 0;
-  vertices[0].x = 0; vertices[0].y = 0; vertices[0].z = 0;
+  vertices[0].x = s_viewport.x; vertices[0].y = s_viewport.y; vertices[0].z = 0;
   vertices[1].u = SCREENWIDTH; vertices[1].v = SCREENHEIGHT;
-  vertices[1].x = PSP_SCREENWIDTH; vertices[1].y = PSP_SCREENHEIGHT; vertices[1].z = 0;
+  vertices[1].x = s_viewport.x + s_viewport.w; vertices[1].y = s_viewport.y + s_viewport.h; vertices[1].z = 0;
 
   sceGumDrawArray(GU_SPRITES, GU_TEXTURE_32BITF|GU_VERTEX_32BITF|GU_TRANSFORM_2D, 2, NULL, vertices);
 
@@ -133,6 +265,8 @@ void DG_DrawFrame()
   sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);
   sceDisplayWaitVblankStart();
   sceGuSwapBuffers();
+
+  handleInput();
 }
 
 void DG_SleepMs(uint32_t ms)
@@ -151,6 +285,22 @@ uint32_t DG_GetTicksMs()
 
 int DG_GetKey(int* pressed, unsigned char* doomKey)
 {
+  if (s_buttonQueueReadIndex == s_buttonQueueWriteIndex)
+  {
+    return 0;
+  }
+  else
+  {
+    uint16_t buttonData = s_buttonQueue[s_buttonQueueReadIndex];
+    s_buttonQueueReadIndex++;
+    s_buttonQueueReadIndex %= BUTTONQUEUE_SIZE;
+
+    *pressed = buttonData >> 8;
+    *doomKey = buttonData & 0xFF;
+
+    return 1;
+  }
+
   return 0;
 }
 

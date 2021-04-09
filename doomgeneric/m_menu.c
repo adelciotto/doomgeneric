@@ -234,8 +234,10 @@ enum
     options,
     loadgame,
     savegame,
+#ifndef __PSP__
     readthis,
     quitdoom,
+#endif
     main_end
 } main_e;
 
@@ -245,9 +247,11 @@ menuitem_t MainMenu[]=
     {1,"M_OPTION",M_Options,'o'},
     {1,"M_LOADG",M_LoadGame,'l'},
     {1,"M_SAVEG",M_SaveGame,'s'},
+#ifndef __PSP__
     // Another hickup with Special edition.
     {1,"M_RDTHIS",M_ReadThis,'r'},
     {1,"M_QUITG",M_QuitDOOM,'q'}
+#endif
 };
 
 menu_t  MainDef =
@@ -2094,11 +2098,13 @@ void M_Init (void)
     switch ( gamemode )
     {
       case commercial:
+#ifndef __PSP__
         // Commercial has no "read this" entry.
 	MainMenu[readthis] = MainMenu[quitdoom];
 	MainDef.numitems--;
 	MainDef.y += 8;
 	NewDef.prevMenu = &MainDef;
+#endif
 	break;
       case shareware:
 	// Episode 2 and 3 are handled,
